@@ -1,0 +1,330 @@
+extends layout
+block main
+	div.container
+		div.row.mt-2
+			table.table.table-bordered.table-hover
+				thead.bg-dark
+					tr.text-light
+						th.w-25 日期
+						th.w-25 名稱
+						th.w-25 總價
+						th.w-25 
+				tbody#orderBody
+		div.row.mt-2
+			div.col-sm-4
+			div.col-sm-1(align="right")
+				button#preBtn(type="button").btn.btn-primary <
+			div.col-sm-2(align="center")
+				span#pageSpan.align-middle.text-monospace 1 / 1
+			div.col-sm-1(align="lefht")
+				button#nextBtn(type="button").btn.btn-primary >
+			div.col-sm-4
+		div.row.mt-2
+			button#addOrderBtn.btn.btn-success(type="button") 新增訂單
+	div#orderModal.modal.fade(tabindex='-1', role='dialog', aria-labelledby='exampleModalScrollableTitle', aria-hidden='true')
+		div.modal-dialog.modal-dialog.modal-xl(role='document')
+			div.modal-content
+				div.modal-header
+					h5#orderModalTitle.modal-title 設定講義狀態
+				div#orderItemsDIV.modal-body(style="overflow:auto;")
+					table.table.table-bordered.table-hover
+						thead.bg-dark
+							tr.text-light
+								th(style="width:100px;") 購買人
+								th(style="width:100px;") 商品名
+								th(style="width:65px;") 單價
+								th(style="width:65px;") 數量
+								th 備註
+								th(style="width:100px;") 總金額
+								th(style="width:150px;")
+						tbody#orderItemsBody
+				div.row.pl-3.pr-3
+					div.col-sm-2 *購買人
+					div.col-sm-2 *商品名
+					div.col-sm-1 *單價
+					div.col-sm-1 *數量
+					div.col-sm-5 備註
+					div.col-sm-1 新增
+				div.row.pl-3.pr-3
+					div.col-sm-2
+						input(type="text", name="ownerInput", id="ownerInput").form-control.text-left
+					div.col-sm-2
+						input(type="text", name="nameInput", id="nameInput").form-control.text-left
+					div.col-sm-1
+						input(type="number", name="priceInput", id="priceInput").form-control.text-left
+					div.col-sm-1
+						input(type="number", name="countInput", id="countInput").form-control.text-left
+					div.col-sm-5
+						textarea(name="notesInput", id="notesInput" cols="50")
+					div.col-sm-1
+						button#addItemBtn.btn.btn-success(type='button') +
+				div.modal-footer
+					button.btn.btn-primary(type='button', data-dismiss='modal') 關閉
+block scripts
+	script.
+		var orders = !{JSON.stringify(orders)};
+		var maxIndex = Math.ceil(orders.length / 10);
+		var tableIndex = 0;
+		$(document).ready(() => {
+			$('#orderModal').modal({
+			  	keyboard: false,
+			  	backdrop: "static",
+			  	show: false
+			});
+			$("#orderItemsDIV").css("height", $(window).height() * 0.6 + "px");
+
+			$('#orderModal').on('show.bs.modal', function (e){
+				refreshItems();
+			});
+
+			$('#orderModal').on('hide.bs.modal', function (e){
+				refreshTable();
+			});
+
+			$("#nextBtn").click(() => {
+		 		tableIndex++;
+			 	if(tableIndex > maxIndex - 1)
+			 		tableIndex--;
+			 	else
+		 			refreshTable();
+			 });
+
+			$("#preBtn").click(() => {
+				tableIndex--;
+				if(tableIndex < 0)
+					tableIndex++;
+				else
+					refreshTable();
+			});
+
+			$("#addOrderBtn").click(() => {
+				var name = prompt("請輸入訂單名稱");
+				if(name != null){
+					$.ajax({
+						url: "/orders",
+						method: "POST",
+						data: {
+							name: name
+						},
+						dataType: "json"
+					}).done((newOrders) => {
+						reloadOrders(newOrders);
+					}).fail((err) => {
+						alert(err.responseText);
+					});
+				}
+			});
+
+			$("#addItemBtn").click(() => {
+				var owner = $("#ownerInput").val();
+				var name = $("#nameInput").val();
+				var price = $("#priceInput").val();
+				var count = $("#countInput").val();
+				var notes = $("#notesInput").val();
+				if(owner == "" || name == "" || price == "" || count == "")
+					alert("請填寫必填欄位");
+				else{
+					var item = {
+						owner: owner,
+						name: name,
+						price: parseInt(price),
+						count: parseInt(count),
+						notes: notes
+					};
+					$.ajax({
+						url: "/orders/item",
+						method: "POST",
+						data: {
+							item: item,
+							order: $('#orderModal')[0].target
+						},
+						dataType: "json"
+					}).done((newItems) => {
+						$('#orderModal')[0].target.items = newItems;
+						refreshItems();
+					}).fail((err) => {
+						alert(err.responseText);
+					});
+				}
+			});
+
+			refreshTable();
+		});
+
+		function reloadOrders(newOrders){
+			orders = newOrders;
+			tableIndex = 0;
+			maxIndex = Math.ceil(orders.length / 10);
+			refreshTable();
+		}
+
+		function refreshTable(){
+		 	$("#orderBody").empty();
+		 	$("#pageSpan").text(`${maxIndex == 0 ? 0 : tableIndex + 1} / ${maxIndex}`);
+		 	if(maxIndex > 0){
+		 		for(var i = tableIndex * 10 ; i < orders.length ; i++){
+			 		if(i == (tableIndex + 1) * 10)
+			 			break;
+			 		else
+			 			appendOrderTR(orders[i]);
+			 	};
+		 	}
+		}
+
+		function appendOrderTR(order){
+			var viewBtn = $("<button class='btn btn-primary mr-1'>查看</button>");
+			viewBtn[0].target = order;
+
+			var removeBtn = $("<button class='btn btn-danger mr-1'>刪除</button>");
+			removeBtn[0].target = order;
+
+			var total = 0;
+			order.items.forEach((item) => {
+				total += (item.price * item.count);
+			});
+
+			var tr = $("<tr>")
+			.append($("<th>").html(order.date))
+			.append($("<th>").html(order.name))
+			.append($("<th>").html(total))
+			.append($("<th>").attr("class", "align-middle text-center").append(viewBtn).append(removeBtn)).appendTo($("#orderBody"));
+
+			viewBtn.click(function(){
+				var order = this.target;
+				$("#orderModal")[0].target = order;
+				$("#orderModalTitle").html(`${order.date} ${order.name}`);
+				$("#orderModal").modal("show");
+			});
+
+			removeBtn.click(function(){
+				var order = this.target;
+				var r = confirm("確定刪除訂單嗎？");
+				if(r){
+					$.ajax({
+						url: "/orders",
+						method: "DELETE",
+						data: {
+							order: order
+						},
+						dataType: "json"
+					}).done((newOrders) => {
+						reloadOrders(newOrders);
+					}).fail((err) => {
+						alert(err.responseText);
+					});
+				}
+			});
+		}
+
+		function appendItemTR(item){
+			var editBtn = $("<button class='btn btn-warning mr-1'>編輯</button>");
+			editBtn[0].target = item;
+
+			var removeBtn = $("<button class='btn btn-danger mr-1'>刪除</button>");
+			removeBtn[0].target = item;
+
+			var tr = $("<tr>")
+			.append($("<th>").html(item.owner))
+			.append($("<th>").html(item.name))
+			.append($("<th>").html(item.price))
+			.append($("<th>").html(item.count))
+			.append($("<th>").html(item.notes))
+			.append($("<th>").html(item.price * item.count))
+			.append($("<th>").attr("class", "align-middle text-center").append(editBtn).append(removeBtn)).appendTo($("#orderItemsBody"));
+
+			editBtn.click(function(){
+				var tr = $(this).parent().parent();
+				
+				if($("#ownerEditInput").length == 0){
+					var item = this.target;
+
+					var saveBtn = $("<button class='btn btn-success mr-1'>儲存</button>");
+					saveBtn[0].target = item;
+
+					var cancelBtn = $("<button class='btn btn-danger mr-1'>取消</button>");
+
+					var newTR = $("<tr>")
+					.append($("<th class='p-0'>").append($(`<input type="text" name="ownerEditInput" id="ownerEditInput" style="width:100px;">`).val(item.owner)))
+					.append($("<th class='p-0'>").append($(`<input type="text" name="nameEditInput" id="nameEditInput" style="width:100px;">`).val(item.name)))
+					.append($("<th class='p-0'>").append($(`<input type="number" name="priceEditInput" id="priceEditInput" style="width:65px;">`).val(item.price)))
+					.append($("<th class='p-0'>").append($(`<input type="number" name="countEditInput" id="countEditInput" style="width:65px;">`).val(item.count)))
+					.append($("<th class='p-0'>").append($(`<textarea name="notesEditInput" id="notesEditInput" cols="50">`).val(item.notes)))
+					.append($("<th class='p-0'>").html(""))
+					.append($("<th class='p-0'>").attr("class", "align-middle text-center").append(saveBtn).append(cancelBtn));
+
+					tr.after(newTR);
+					tr.remove();
+
+					saveBtn.click(function(){
+						var owner = $("#ownerEditInput").val();
+						var name = $("#nameEditInput").val();
+						var price = $("#priceEditInput").val();
+						var count = $("#countEditInput").val();
+						var notes = $("#notesEditInput").val();
+						if(owner == "" || name == "" || price == "" || count == "")
+							alert("請填寫必填欄位");
+						else{
+							item.owner = owner;
+							item.name = name;
+							item.price = price;
+							item.count = count;
+							item.notes = notes;
+							$.ajax({
+								url: "/orders/item",
+								method: "PUT",
+								data: {
+									item: item,
+									order: $('#orderModal')[0].target
+								},
+								dataType: "json"
+							}).done((newItems) => {
+								$('#orderModal')[0].target.items = newItems;
+								refreshItems();
+							}).fail((err) => {
+								alert(err.responseText);
+							});
+						}
+					});
+
+					cancelBtn.click(function(){
+						refreshItems();
+					});
+				}
+				else
+					alert("請先儲存編輯中項目");
+			});
+
+			removeBtn.click(function(){
+				var item = this.target;
+				var r = confirm("確定刪除此筆資料嗎？");
+				if(r){
+					$.ajax({
+						url: "/orders/item",
+						method: "DELETE",
+						data: {
+							item: item,
+							order: $('#orderModal')[0].target
+						},
+						dataType: "json"
+					}).done((newItems) => {
+						$('#orderModal')[0].target.items = newItems;
+						refreshItems();
+					}).fail((err) => {
+						alert(err.responseText);
+					});
+				}
+			});
+		}
+
+		function refreshItems(){
+			$("#orderItemsBody").empty();
+			$("#ownerInput").val("");
+			$("#nameInput").val("");
+			$("#priceInput").val("");
+			$("#countInput").val("");
+			$("#notesInput").val("");
+			var order = $('#orderModal')[0].target;
+			order.items.forEach((item) => {
+				appendItemTR(item);
+			});
+		}
